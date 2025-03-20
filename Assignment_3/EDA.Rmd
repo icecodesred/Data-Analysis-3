@@ -1,0 +1,198 @@
+---
+title: "DA3"
+author: "me"
+date: "2025-03-17"
+output: html_document
+---
+
+
+Exploratory Data Analysis. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(tseries)
+library(forecast)
+library(ggpubr)
+```
+Visualizing general trends. 
+```{r}
+data<-read.csv("data.csv")
+data$ts <- as.POSIXct(data$ts, format = "%Y-%m-%d %H:%M:%S")
+
+summary(data)
+
+ggplot(data, aes(x = ts)) +
+  geom_line(aes(y = v1, color = "v1"), size = 1) +
+  geom_line(aes(y = v2, color = "v2"), size = 1) +
+  labs(title = "Time Series of v1 and v2", x = "Time", y = "Values") +
+  theme_minimal() +
+  scale_color_manual(values = c("blue", "red"))
+```
+Distibution of values
+
+```{r}
+
+ggplot(data, aes(x = v1)) + 
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.6) +
+  labs(title = "Histogram of v1")
+
+ggplot(data, aes(x = v2)) + 
+  geom_histogram(bins = 30, fill = "red", alpha = 0.6) +
+  labs(title = "Histogram of v2")
+
+
+```
+```{r}
+data$v1 <- as.numeric(as.character(data$v1))
+data$v2 <- as.numeric(as.character(data$v2))
+
+cor(data$v1, data$v1, use = "complete.obs")
+ggplot(data, aes(x = v1, y = v2)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(title = "Scatter Plot of v1 vs v2")
+
+```
+Correlations
+
+```{r}
+data[data$v2 == 0, ]
+
+cor(data$v1, data$v2, use = "complete.obs", method = "pearson")  # Pearson (linear)
+cor(data$v1, data$v2, use = "complete.obs", method = "spearman") # Spearman (rank-based)
+cor(data$v1, data$v2, use = "complete.obs", method = "kendall")  # Kendall (non-linear)
+```
+```{r}
+
+#iterating through months 
+data$year <- year(data$ts)
+data$month_day_hour <- format(data$ts, "%m-%d %H:%M:%S")  
+data$month_day <- format(data$ts, "%m-%d")
+data$month_day <- factor(data$month_day, levels = unique(data$month_day))
+data$month <- month(data$ts)
+
+
+data_jan <- data %>% filter(month(ts) == 1)
+data_feb <- data %>% filter(month(ts) == 2)
+data_mar <- data %>% filter(month(ts) == 3)
+data_jun <- data %>% filter(month(ts) == 6)
+data_jul <- data %>% filter(month(ts) == 7)
+data_oct <- data %>% filter(month(ts) == 10)
+data_nov <- data %>% filter(month(ts) == 11)
+data_dec <- data %>% filter(month(ts) == 12)
+
+data_jan$time_index <- as.numeric(as.factor(data_jan$month_day_hour))
+data_feb$time_index <- as.numeric(as.factor(data_feb$month_day_hour))
+data_mar$time_index <- as.numeric(as.factor(data_mar$month_day_hour))
+data_jun$time_index <- as.numeric(as.factor(data_jun$month_day_hour))
+data_jul$time_index <- as.numeric(as.factor(data_jul$month_day_hour))
+data_oct$time_index <- as.numeric(as.factor(data_oct$month_day_hour))
+data_nov$time_index <- as.numeric(as.factor(data_nov$month_day_hour))
+data_dec$time_index <- as.numeric(as.factor(data_dec$month_day_hour))
+
+
+ggplot(data_nov, aes(x = month_day_hour, y = v1, group = as.factor(year), color = as.factor(year))) +
+  geom_line(alpha = 0.8, size = 1) +
+  scale_x_discrete(breaks = data_jan$month_day_hour[seq(1, length(data_jan$month_day_hour), by = 24)]) + 
+  labs(title = "Hourly Trends in January (Each Year as a Separate Line)",
+       x = "Day & Hour",
+       y = "v1 Values",
+       color = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+```
+Multi-layer inspections
+
+```{r}
+#displaying desire month
+data_nov$hour <- hour(data_nov$ts)
+
+hourly_avg <- data_nov %>%
+  group_by(year, hour) %>%
+  summarise(avg_v1 = mean(v1, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(hourly_avg, aes(x = hour, y = avg_v1, group = as.factor(year), color = as.factor(year))) +
+  geom_line(size = 1, alpha = 0.8) +
+  geom_point(size = 2) +  
+  scale_x_continuous(breaks = seq(0, 23, by = 1)) + 
+  labs(title = "Hourly Averages in January (Each Year as a Separate Line)",
+       x = "Hour of the Day",
+       y = "Average v1",
+       color = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10))
+
+```
+values consistently peak at 12 exactly no matter what time of the year. this could indicate something man-made rather than a natural phenomenon. something related to work? this would
+explain weekend-weekday trends, holidays like the beginning/end of the year.
+```{r}
+data_2022 <- data %>% filter(year(ts) == 2022)
+data_2022$hour <- hour(data_2022$ts)
+
+hourly_avg <- data_2022 %>%
+  group_by(month, hour) %>%
+  summarise(avg_v1 = mean(v1, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(hourly_avg, aes(x = hour, y = avg_v1, group = as.factor(month), color = as.factor(month))) +
+  geom_line(size = 1.2) +  
+  geom_point(size = 2) +  
+  scale_x_continuous(breaks = seq(0, 23, by = 1)) +  # Ensure hourly ticks (0-23)
+  scale_color_manual(values = c("1" = "#1f77b4", "2" = "#ff7f0e", "3" = "#2ca02c",
+                                "4" = "#d62728", "5" = "#9467bd", "6" = "#8c564b",
+                                "7" = "#e377c2", "8" = "#7f7f7f", "9" = "#bcbd22",
+                                "10" = "#17becf", "11" = "#aec7e8", "12" = "#ff9896"),
+                     labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May",
+                                "6" = "Jun", "7" = "Jul", "8" = "Aug", "9" = "Sep", "10" = "Oct",
+                                "11" = "Nov", "12" = "Dec")) + 
+  labs(title = "Hourly Averages Throughout the Months (2022)",
+       x = "Hour of the Day",
+       y = "Average v1",
+       color = "Month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10),  
+        legend.position = "right")  
+
+
+```
+```{r}
+data_2023 <- data %>% filter(year(ts) == 2023)
+data_2023$hour <- hour(data_2023$ts)
+
+hourly_avg <- data_2023 %>%
+  group_by(month, hour) %>%
+  summarise(avg_v1 = mean(v1, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(hourly_avg, aes(x = hour, y = avg_v1, group = as.factor(month), color = as.factor(month))) +
+  geom_line(size = 1.2) +  
+  geom_point(size = 2) +   
+  scale_x_continuous(breaks = seq(0, 23, by = 1)) +  # Ensure hourly ticks (0-23)
+  scale_color_manual(values = c("1" = "#1f77b4", "2" = "#ff7f0e", "3" = "#2ca02c",
+                                "4" = "#d62728", "5" = "#9467bd", "6" = "#8c564b",
+                                "7" = "#e377c2", "8" = "#7f7f7f", "9" = "#bcbd22",
+                                "10" = "#17becf", "11" = "#aec7e8", "12" = "#ff9896"),
+                     labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May",
+                                "6" = "Jun", "7" = "Jul", "8" = "Aug", "9" = "Sep", "10" = "Oct",
+                                "11" = "Nov", "12" = "Dec")) +  # Correct legend labels
+  labs(title = "Hourly Averages Throughout the Months (2022)",
+       x = "Hour of the Day",
+       y = "Average v1",
+       color = "Month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10), 
+        legend.position = "right") 
+
+```
+
+
+
